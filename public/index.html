@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>ZOMBIE BREAK - Prueba multijugador</title>
+<style>
+  body { margin: 0; background: #12101c; color: #fff; font-family: system-ui, Arial, sans-serif; text-align: center; }
+  h1 { font-size: 20px; margin: 10px 0 2px; } .sub { color: #9aa; font-size: 13px; margin-bottom: 8px; }
+  .row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin: 6px; }
+  input, button { font-size: 16px; padding: 8px 10px; border-radius: 6px; border: 2px solid #000; }
+  input { width: 120px; text-transform: uppercase; } button { background: #2f7bd6; color: #fff; font-weight: 700; }
+  button.red { background: #c0392b; } button:disabled { opacity: .45; }
+  #status { font-weight: 700; min-height: 22px; } #code { color: #ffe14a; font-size: 22px; letter-spacing: 3px; }
+  canvas { background: #1d3a22; border: 3px solid #000; max-width: 96vw; touch-action: none; }
+  #log { font: 12px monospace; text-align: left; max-width: 420px; margin: 6px auto; height: 110px; overflow: auto; background: #0a0a12; padding: 6px; border-radius: 6px; }
+  .pad button { width: 56px; height: 48px; }
+</style>
+</head>
+<body>
+<h1>ZOMBIE BREAK · Prueba multijugador</h1>
+<div class="sub">Abre esta pagina en dos pestanas o dos telefonos. Crea una sala en uno y unete con el codigo en el otro.</div>
+<div id="status">Conectando al servidor…</div>
+<div class="row"><input id="name" maxlength="16" placeholder="Tu nombre"><button id="bCreate" disabled>CREAR SALA</button></div>
+<div class="row"><input id="codeIn" maxlength="5" placeholder="CODIGO"><button id="bJoin" disabled>UNIRSE</button><button id="bLeave" class="red" disabled>SALIR</button></div>
+<div>Sala: <span id="code">-----</span> · Jugadores: <b id="count">0/2</b></div>
+<canvas id="cv" width="420" height="300"></canvas>
+<div class="pad row"><button data-d="up">▲</button><button data-d="left">◀</button><button data-d="down">▼</button><button data-d="right">▶</button></div>
+<div class="sub">Mueve tu cuadrado con las flechas / WASD o con los botones.</div>
+<div id="log"></div>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var socket = io({ transports: ['websocket', 'polling'] });
+  var me = null, players = {}, room = null, W = 420, H = 300, keys = {}, lastSent = 0, dirty = false;
+  var COLORS = { 1: '#4aa3ff', 2: '#ff9a3c' };
+
+  function log(t) { var d = $('log'); d.textContent += t + '\n'; d.scrollTop = d.scrollHeight; }
+  function status(t, bad) { $('status').textContent = t; $('status').style.color = bad ? '#ff6b6b' : '#8dff8d'; }
+  function ui() {
+    var inRoom = !!room;
+    $('bCreate').disabled = !socket.connected || inRoom; $('bJoin').disabled = !socket.connected || inRoom; $('bLeave').disabled = !inRoom;
+    $('code').textContent = room ? room.code : '-----'; $('count').textContent = room ? room.count + '/' + room.max + (room.full ? ' (llena)' : '') : '0/2';
+  }
+  function setRoom(r) {
+    room = r;
+    var ids = {}; r.players.forEach(function (p) { ids[p.id] = 1; if (!players[p.id]) players[p.id] = { slot: p.slot, name: p.name, x: p.slot === 1 ? 100 : 320, y: 150, dir: 'down', moving: false }; players[p.id].name = p.name; players[p.id].slot = p.slot; });
+    Object.keys(players).forEach(function (id) { if (!ids[id]) delete players[id]; });
+    ui();
+  }
+  function reset() { room = null; me = null; players = {}; ui(); }
+
+  socket.on('connect', function () { status('Conectado (id ' + socket.id.slice(0, 5) + ')'); ui(); });
+  socket.on('disconnect', function (why) { status('Desconectado: ' + why, true); reset(); });
+  socket.on('connect_error', function (e) { status('No se pudo conectar: ' + e.message, true); });
+  socket.on('room:state', function (r) { if (room) setRoom(r); });
+  socket.on('player:joined', function (d) { log('➕ ' + d.player.name + ' (J' + d.player.slot + ') se conecto'); });
+  socket.on('player:left', function (d) { log('➖ ' + (d.player ? d.player.name : '?') + ' salio (' + d.reason + ')'); });
+  socket.on('player:state', function (s) { var p = players[s.id]; if (p) { p.x = s.x; p.y = s.y; p.dir = s.dir; p.moving = s.moving; } });
+
+  function afterEnter(res) {
+    if (!res.ok) { status(res.message || res.error, true); log('⚠ ' + (res.message || res.error)); return; }
+    me = res.you; setRoom(res.room); status('En sala ' + res.room.code + ' como Jugador ' + me.slot); log('✔ Sala ' + res.room.code + ' · eres J' + me.slot);
+  }
+  $('bCreate').onclick = function () { socket.emit('room:create', { name: $('name').value }, afterEnter); };
+  $('bJoin').onclick = function () { socket.emit('room:join', { code: $('codeIn').value, name: $('name').value }, afterEnter); };
+  $('bLeave').onclick = function () { socket.emit('room:leave', function () { log('Saliste de la sala'); reset(); status('Conectado'); }); };
+
+  window.addEventListener('keydown', function (e) { keys[e.key.toLowerCase()] = true; if (e.key.indexOf('Arrow') === 0) e.preventDefault(); });
+  window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
+  document.querySelectorAll('.pad button').forEach(function (b) {
+    var d = b.getAttribute('data-d'), key = { up: 'arrowup', down: 'arrowdown', left: 'arrowleft', right: 'arrowright' }[d];
+    ['pointerdown'].forEach(function (ev) { b.addEventListener(ev, function (e) { e.preventDefault(); keys[key] = true; }); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) { b.addEventListener(ev, function () { keys[key] = false; }); });
+  });
+
+  var last = performance.now();
+  function frame(now) {
+    var dt = Math.min(0.05, (now - last) / 1000); last = now;
+    var mine = me && players[me.id];
+    if (mine) {
+      var dx = (keys.arrowright || keys.d ? 1 : 0) - (keys.arrowleft || keys.a ? 1 : 0), dy = (keys.arrowdown || keys.s ? 1 : 0) - (keys.arrowup || keys.w ? 1 : 0);
+      if (dx || dy) {
+        var l = Math.hypot(dx, dy); mine.x = Math.max(10, Math.min(W - 10, mine.x + dx / l * 120 * dt)); mine.y = Math.max(10, Math.min(H - 10, mine.y + dy / l * 120 * dt));
+        mine.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'); mine.moving = true; dirty = true;
+      } else if (mine.moving) { mine.moving = false; dirty = true; }
+      if (dirty && now - lastSent > 50) { socket.emit('player:update', { x: mine.x, y: mine.y, dir: mine.dir, moving: mine.moving }); lastSent = now; dirty = false; }
+    }
+    var g = $('cv').getContext('2d'); g.clearRect(0, 0, W, H);
+    Object.keys(players).forEach(function (id) {
+      var p = players[id]; g.fillStyle = COLORS[p.slot] || '#fff'; g.fillRect(p.x - 10, p.y - 10, 20, 20);
+      g.fillStyle = '#000'; var ex = p.dir === 'right' ? 4 : p.dir === 'left' ? -4 : 0, ey = p.dir === 'down' ? 4 : p.dir === 'up' ? -4 : 0; g.fillRect(p.x - 2 + ex, p.y - 2 + ey, 4, 4);
+      g.fillStyle = '#fff'; g.font = '12px sans-serif'; g.textAlign = 'center'; g.fillText((id === (me && me.id) ? '▶ ' : '') + p.name + ' (J' + p.slot + ')', p.x, p.y - 16);
+    });
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  ui();
+})();
+</script>
+</body>
+</html>

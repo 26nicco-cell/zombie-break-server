@@ -1,0 +1,24 @@
+{
+  "name": "zombie-break-server",
+  "version": "0.1.0",
+  "description": "Servidor multijugador online de ZOMBIE BREAK (Fase 1: salas de 2 jugadores y presencia/posicion basica) con Node.js, Express y Socket.IO.",
+  "main": "server.js",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test test/rooms.test.js test/handlers.test.js",
+    "smoke": "node scripts/smoke-test.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.7.5"
+  }
+}
