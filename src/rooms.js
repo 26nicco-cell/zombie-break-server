@@ -3,6 +3,7 @@
    Asi se puede probar sin red y reutilizar en futuras fases (zombis, combate, etc.). */
 const crypto = require('crypto');
 const CFG = require('./config');
+const WorldState = require('./world');
 
 const ERR = {
   INVALID_CODE: 'El codigo de sala no es valido (son 5 letras/numeros).',
@@ -14,6 +15,8 @@ const ERR = {
   NOT_HOST: 'Solo el anfitrion puede iniciar la partida.',
   NOT_ENOUGH_PLAYERS: 'Faltan jugadores: la sala debe estar completa para iniciar.',
   ROOM_STARTED: 'La partida de esa sala ya comenzo.',
+  NOT_STARTED: 'La partida todavia no comenzo.',
+  GONE: 'Ese recurso ya no existe.',
   ALREADY_STARTED: 'La partida ya comenzo.',
   RATE_LIMIT: 'Demasiadas peticiones. Espera unos segundos.',
   BAD_DATA: 'Datos invalidos.',
@@ -84,7 +87,7 @@ class RoomManager {
     if (this.rooms.size >= this.maxRooms) return fail('SERVER_FULL');
     const code = this.generateCode();
     if (!code) return fail('CODE_FAILED');
-    const room = { code, createdAt: Date.now(), players: new Map(), host: id, started: false, seed: 0 };
+    const room = { code, createdAt: Date.now(), players: new Map(), host: id, started: false, seed: 0, world: new WorldState(), emptyAt: 0 };
     this.rooms.set(code, room);
     const player = this._addPlayer(room, id, rawName);
     return { ok: true, room: this.snapshot(room), player: this.publicPlayer(player) };
@@ -96,12 +99,13 @@ class RoomManager {
     if (this.playerRoom.has(id)) return fail('ALREADY_IN_ROOM');
     const room = this.rooms.get(code);
     if (!room) return fail('ROOM_NOT_FOUND');
-    if (room.started) return fail('ROOM_STARTED');
     if (room.players.size >= this.maxPlayers) return fail('ROOM_FULL');
     const player = this._addPlayer(room, id, rawName);
+    if (!room.host) room.host = id;
     const others = [];
     room.players.forEach((p) => { if (p.id !== id && p.pos) others.push(Object.assign({ id: p.id, slot: p.slot }, p.pos)); });
-    return { ok: true, room: this.snapshot(room), player: this.publicPlayer(player), othersState: others };
+    room.emptyAt = 0;
+    return { ok: true, room: this.snapshot(room), player: this.publicPlayer(player), othersState: others, world: room.started ? room.world.snapshot() : null };
   }
 
   /* Consulta sin unirse: sirve para mostrar "1/2 jugadores" y detectar sala llena */
@@ -123,8 +127,12 @@ class RoomManager {
     const player = room.players.get(id);
     room.players.delete(id);
     let deleted = false, snap = null;
-    if (room.players.size === 0) { this.rooms.delete(code); deleted = true; }   // las salas vacias se eliminan
-    else {
+    if (room.world) room.world.forgetPlayer(id);
+    if (room.players.size === 0) {
+      if (room.started) { room.emptyAt = Date.now(); room.host = null; snap = this.snapshot(room); }   // partida en curso: se conserva un tiempo para reconectar
+      else { this.rooms.delete(code); deleted = true; }                                               // las salas sin empezar se eliminan
+    }
+    if (room.players.size > 0) {
       if (room.host === id) {                                                     // si se va el anfitrion, pasa al jugador con menor puesto
         let next = null; room.players.forEach((p) => { if (!next || p.slot < next.slot) next = p; });
         room.host = next.id;
@@ -162,7 +170,7 @@ class RoomManager {
     if (room.host !== id) return fail('NOT_HOST');
     if (room.started) return fail('ALREADY_STARTED');
     if (room.players.size < this.maxPlayers) return fail('NOT_ENOUGH_PLAYERS');
-    room.started = true;
+    room.started = true; room.world.restartClock(now + CFG.START_COUNTDOWN_MS);
     room.seed = this.randomInt(2147483646) + 1;
     return { ok: true, code, seed: room.seed, startAt: now + CFG.START_COUNTDOWN_MS, countdownMs: CFG.START_COUNTDOWN_MS, serverTime: now, room: this.snapshot(room) };
   }
@@ -184,6 +192,32 @@ class RoomManager {
     player.lastPosAt = now;
     player.pos = { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, dir, moving: data.moving === true };
     return { ok: true, code, state: Object.assign({ id: player.id, slot: player.slot }, player.pos) };
+  }
+
+  /* ---------- mundo compartido ---------- */
+  roomOf(id) { const code = this.playerRoom.get(id); return code ? this.rooms.get(code) : null; }
+
+  worldHit(id, op, now) {
+    const room = this.roomOf(id);
+    if (!room) return fail('NOT_IN_ROOM');
+    if (!room.started) return fail('NOT_STARTED');
+    const r = room.world.hitNode(id, op, now);
+    if (r.ok) r.code = room.code;
+    return r;
+  }
+
+  worldSnapshot(id) {
+    const room = this.roomOf(id);
+    if (!room) return fail('NOT_IN_ROOM');
+    if (!room.started) return fail('NOT_STARTED');
+    return { ok: true, world: room.world.snapshot() };
+  }
+
+  /* Borra las partidas iniciadas que llevan demasiado tiempo vacias */
+  sweep(now) {
+    now = now == null ? Date.now() : now; let n = 0;
+    this.rooms.forEach((room, code) => { if (room.players.size === 0 && room.emptyAt && now - room.emptyAt > CFG.RECONNECT_GRACE_MS) { this.rooms.delete(code); n++; } });
+    return n;
   }
 
   stats() { return { rooms: this.rooms.size, players: this.playerRoom.size }; }

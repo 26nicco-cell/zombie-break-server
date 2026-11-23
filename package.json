@@ -11,7 +11,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test test/rooms.test.js test/handlers.test.js",
+    "test": "node --test test/rooms.test.js test/handlers.test.js test/world.test.js",
     "smoke": "node scripts/smoke-test.js"
   },
   "dependencies": {

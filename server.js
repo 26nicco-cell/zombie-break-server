@@ -56,6 +56,8 @@ app.use(function (err, req, res, next) { log('error', 'http: ' + (err && err.sta
 process.on('uncaughtException', function (e) { log('error', 'uncaughtException: ' + (e && e.stack || e)); });
 process.on('unhandledRejection', function (e) { log('error', 'unhandledRejection: ' + (e && e.stack || e)); });
 
+setInterval(function () { try { const n = manager.sweep(); if (n) log('info', 'partidas vacias eliminadas: ' + n); } catch (e) { log('error', 'sweep: ' + e); } }, 60000).unref();
+
 server.listen(CFG.PORT, '0.0.0.0', function () { log('info', 'ZOMBIE BREAK server escuchando en el puerto ' + CFG.PORT); });
 
 function shutdown(sig) {

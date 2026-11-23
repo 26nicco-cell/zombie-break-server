@@ -38,10 +38,11 @@ function registerHandlers(io, socket, manager, log) {
     if (!r.ok) return ack(r);
     socket.join(r.room.code);
     log('info', socket.id + ' se unio a ' + r.room.code + ' (' + r.room.count + '/' + r.room.max + ')');
-    ack({ ok: true, you: r.player, room: r.room });
+    ack({ ok: true, you: r.player, room: r.room, world: r.world || null });
     socket.to(r.room.code).emit('player:joined', { player: r.player, room: r.room });
     io.to(r.room.code).emit('room:state', r.room);
-    r.othersState.forEach(function (st) { socket.emit('player:state', st); });   // posicion actual de quien ya estaba
+    r.othersState.forEach(function (st) { socket.emit('player:state', st); });
+    if (r.world) log('info', socket.id + ' reconecto a partida en curso ' + r.room.code);   // posicion actual de quien ya estaba
   });
 
   on('room:check', function (payload, ack) {
@@ -68,8 +69,21 @@ function registerHandlers(io, socket, manager, log) {
     if (!r.ok) return ack(r);
     log('info', 'partida iniciada en sala ' + r.code);
     ack({ ok: true });
-    io.to(r.code).emit('game:start', { code: r.code, seed: r.seed, startAt: r.startAt, countdownMs: r.countdownMs, serverTime: r.serverTime, room: r.room });
+    io.to(r.code).emit('game:start', { code: r.code, seed: r.seed, startAt: r.startAt, countdownMs: r.countdownMs, serverTime: r.serverTime, room: r.room, world: manager.roomOf(socket.id).world.snapshot(r.serverTime) });
     io.to(r.code).emit('room:state', r.room);
+  });
+
+  /* ---- mundo compartido: el cliente pide, el servidor valida; solo lo valido se aplica y se retransmite ---- */
+  on('world:hit', function (payload, ack) {
+    const r = manager.worldHit(socket.id, asObj(payload));
+    if (!r.ok) { if (!r.silent) ack(r); else ack({ ok: false, error: 'RATE_LIMIT' }); return; }
+    ack({ ok: true, id: r.id, kind: r.kind, uses: r.uses, max: r.max, gone: r.gone, rev: r.rev });
+    socket.to(r.code).emit('world:op', { t: 'node', id: r.id, kind: r.kind, uses: r.uses, gone: r.gone, rev: r.rev, by: socket.id });
+  });
+
+  on('world:sync', function (payload, ack) {
+    const r = manager.worldSnapshot(socket.id);
+    ack(r);
   });
 
   on('room:leave', function (payload, ack) {

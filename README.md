@@ -172,3 +172,23 @@ socket.on('player:state', (s) => { /* posición del otro jugador */ });
   Esas pruebas usan una simulación mínima de Socket.IO (`test/mock-io.js`), no la red real.
 - ⚠️ La conexión real con Express + Socket.IO **no se pudo ejecutar donde se desarrolló** (sin acceso a internet para instalar los paquetes).
   Por eso se incluyen `npm run smoke` y la página `public/index.html`: son la prueba real y conviene correrlas apenas lo tengas online.
+
+
+## Mundo compartido (Etapa 1)
+
+El servidor es la autoridad del estado del mundo de cada sala iniciada (`src/world.js`). Los clientes piden, el servidor valida, y solo lo valido se aplica y se retransmite.
+
+| Evento (cliente → servidor) | Datos | Respuesta |
+|---|---|---|
+| `world:hit` | `{ id, kind }` (id del objeto del mapa, kind: tree/deadtree/bush/rock/log/box) | `{ ok, id, kind, uses, max, gone }` o `{ ok:false, error: GONE / RATE_LIMIT / BAD_DATA / NOT_STARTED }` |
+| `world:sync` | – | `{ ok, world }` (foto completa) |
+
+| Evento (servidor → cliente) | Datos |
+|---|---|
+| `world:op` | `{ t:'node', id, kind, uses, gone, rev, by }` (cambio hecho por el otro jugador) |
+| `game:start` | ahora incluye `world` (reloj + foto) |
+
+- **Reloj global:** `world.clock = { base, t0, dayLenMs }`. Hora absoluta = `base + (horaServidor - t0) / dayLenMs`. Los clientes la calculan con la hora del servidor, no con su propio reloj.
+- **Reconexión:** `room:join` con el código de una partida iniciada que tenga un puesto libre devuelve `world` (foto). Una partida iniciada sin jugadores se conserva 10 minutos (`RECONNECT_GRACE_MS`).
+- **Persistencia:** solo en memoria. Si Render reinicia o duerme el servicio, las partidas en curso se pierden.
+- Para ampliar: agregar un módulo (estado + operación validada + evento `world:op`) en `world.js`; ver `hitNode`.

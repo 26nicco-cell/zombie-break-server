@@ -124,6 +124,6 @@ test('inicio sincronizado: solo el host, con 2 jugadores; ambos reciben game:sta
   assert.equal(call(a, 'room:start').ok, true);
   const ga = a.events('game:start')[0], gb = b.events('game:start')[0];
   assert.ok(ga && gb); assert.equal(ga.seed, gb.seed); assert.equal(ga.startAt, gb.startAt); assert.equal(ga.room.players.length, 2);
-  assert.equal(call(c, 'room:join', { code }).error, 'ROOM_STARTED');
+  assert.equal(call(c, 'room:join', { code }).error, 'ROOM_FULL');
   assert.equal(c.events('game:start').length, 0);
 });

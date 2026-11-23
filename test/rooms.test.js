@@ -151,10 +151,10 @@ test('anfitrion: el creador es host y puede iniciar solo con la sala completa', 
   assert.equal(m.startGame('a').error, 'ALREADY_STARTED');
 });
 
-test('sala iniciada: nadie mas puede unirse y si se va el host pasa al otro', () => {
+test('sala iniciada llena: nadie mas puede unirse y si se va el host pasa al otro', () => {
   const m = new RoomManager();
   const c = m.createRoom('a').room.code; m.joinRoom('b', c); m.startGame('a');
-  assert.equal(m.joinRoom('c', c).error, 'ROOM_STARTED');
+  assert.equal(m.joinRoom('c', c).error, 'ROOM_FULL');
   assert.equal(m.checkRoom(c).started, true);
   const l = m.leave('a');
   assert.equal(l.room.host, 'b'); assert.equal(l.room.players[0].host, true);

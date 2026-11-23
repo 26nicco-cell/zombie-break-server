@@ -22,6 +22,14 @@ module.exports = {
   /* Inicio de partida: cuenta atras comun (ms) entre el aviso del servidor y el comienzo real */
   START_COUNTDOWN_MS: 3500,
 
+  /* Mundo compartido (Etapa 1) */
+  DAY_LEN_MS: 300000,               // un dia completo del juego = 300 s (igual que DAY_LEN en game.js)
+  CLOCK_START_ABS: 8 / 24,          // la partida empieza a las 08:00 del dia 1
+  MAX_OBJECT_ID: 200000,
+  HIT_MIN_INTERVAL_MS: 150,         // minimo entre golpes de un mismo jugador (el juego repite cada 420 ms)
+  RECONNECT_GRACE_MS: 600000,       // una partida iniciada sin jugadores se conserva 10 min para poder reconectar
+  NODE_MAX_USES: { tree: 4, deadtree: 2, bush: 2, rock: 3, log: 1, box: 1 },   // mismos maximos que el juego
+
   /* Posicion */
   POSITION_MAX_RATE: 30,            // actualizaciones de posicion por segundo y por jugador (el resto se descarta)
   WORLD_LIMIT: 100000,              // |x|,|y| maximos aceptados (el mundo real del juego es mucho menor)
