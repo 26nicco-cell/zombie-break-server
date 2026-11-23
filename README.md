@@ -148,12 +148,13 @@ socket.on('player:state', (s) => { /* posición del otro jugador */ });
 | `room:join` | `{ code, name? }` | `{ ok, you, room }` o `{ ok:false, error, message }` |
 | `room:check` | `{ code }` | `{ ok, exists, count, max, full }` |
 | `room:leave` | – | `{ ok }` |
+| `room:start` | – (solo el anfitrión, sala 2/2) | `{ ok }` y luego todos reciben `game:start` |
 | `player:update` | `{ x, y, dir, moving }` | (sin respuesta) |
 | `ping:check` | – | `{ ok, serverTime }` |
 
-**Servidor → cliente:** `hello`, `room:state` (`{code,count,max,full,players[]}`), `player:joined`, `player:left` (`reason`: `left` o `disconnect`), `player:state`.
+**Servidor → cliente:** `hello`, `room:state` (`{code,count,max,full,players[]}`), `player:joined`, `player:left` (`reason`: `left` o `disconnect`), `player:state`, `game:start` (`{code,seed,startAt,countdownMs,serverTime,room}`; `startAt` es la hora del servidor en que arranca la partida).
 
-**Errores** (`error`): `INVALID_CODE`, `ROOM_NOT_FOUND`, `ROOM_FULL`, `ALREADY_IN_ROOM`, `NOT_IN_ROOM`, `SERVER_FULL`, `RATE_LIMIT`, `BAD_DATA`.
+**Errores** (`error`): `INVALID_CODE`, `ROOM_NOT_FOUND`, `ROOM_FULL`, `ALREADY_IN_ROOM`, `NOT_IN_ROOM`, `NOT_HOST`, `NOT_ENOUGH_PLAYERS`, `ROOM_STARTED`, `ALREADY_STARTED`, `SERVER_FULL`, `RATE_LIMIT`, `BAD_DATA`.
 
 ## Variables de entorno (todas opcionales)
 

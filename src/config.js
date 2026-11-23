@@ -19,6 +19,9 @@ module.exports = {
   CODE_ALPHABET: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', // sin 0/O/1/I para evitar confusiones al dictarlo
   NAME_MAX_LENGTH: 16,
 
+  /* Inicio de partida: cuenta atras comun (ms) entre el aviso del servidor y el comienzo real */
+  START_COUNTDOWN_MS: 3500,
+
   /* Posicion */
   POSITION_MAX_RATE: 30,            // actualizaciones de posicion por segundo y por jugador (el resto se descarta)
   WORLD_LIMIT: 100000,              // |x|,|y| maximos aceptados (el mundo real del juego es mucho menor)

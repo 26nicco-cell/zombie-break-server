@@ -63,6 +63,15 @@ function registerHandlers(io, socket, manager, log) {
     io.to(r.code).emit('room:state', r.room);
   }
 
+  on('room:start', function (payload, ack) {
+    const r = manager.startGame(socket.id);
+    if (!r.ok) return ack(r);
+    log('info', 'partida iniciada en sala ' + r.code);
+    ack({ ok: true });
+    io.to(r.code).emit('game:start', { code: r.code, seed: r.seed, startAt: r.startAt, countdownMs: r.countdownMs, serverTime: r.serverTime, room: r.room });
+    io.to(r.code).emit('room:state', r.room);
+  });
+
   on('room:leave', function (payload, ack) {
     const r = leaveRoom('left');
     ack(r.ok ? { ok: true } : r);

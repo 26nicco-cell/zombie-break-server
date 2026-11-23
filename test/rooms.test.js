@@ -137,3 +137,25 @@ test('limitador de peticiones', () => {
   assert.equal(m.checkRate('a', 'room', 3, 1000, 1500), true);   // la ventana ya paso
   assert.equal(m.checkRate('b', 'room', 3, 1000, 200), true);    // otro socket no se ve afectado
 });
+
+test('anfitrion: el creador es host y puede iniciar solo con la sala completa', () => {
+  const m = new RoomManager();
+  const c = m.createRoom('a', 'Ana');
+  assert.equal(c.room.host, 'a'); assert.equal(c.room.players[0].host, true);
+  assert.equal(m.startGame('a').error, 'NOT_ENOUGH_PLAYERS');
+  m.joinRoom('b', c.room.code);
+  assert.equal(m.startGame('b').error, 'NOT_HOST');
+  assert.equal(m.startGame('zzz').error, 'NOT_IN_ROOM');
+  const s = m.startGame('a', 5000);
+  assert.equal(s.ok, true); assert.equal(s.startAt, 5000 + 3500); assert.ok(s.seed > 0); assert.equal(s.room.started, true);
+  assert.equal(m.startGame('a').error, 'ALREADY_STARTED');
+});
+
+test('sala iniciada: nadie mas puede unirse y si se va el host pasa al otro', () => {
+  const m = new RoomManager();
+  const c = m.createRoom('a').room.code; m.joinRoom('b', c); m.startGame('a');
+  assert.equal(m.joinRoom('c', c).error, 'ROOM_STARTED');
+  assert.equal(m.checkRoom(c).started, true);
+  const l = m.leave('a');
+  assert.equal(l.room.host, 'b'); assert.equal(l.room.players[0].host, true);
+});

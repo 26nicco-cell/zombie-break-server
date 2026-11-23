@@ -112,3 +112,18 @@ test('dos salas distintas no se mezclan', () => {
   assert.equal(b1.events('player:state').length, 0); assert.equal(b2.events('player:state').length, 0);
   assert.equal(a2.events('player:state').length, 1);
 });
+
+test('inicio sincronizado: solo el host, con 2 jugadores; ambos reciben game:start', () => {
+  const { connect, call } = setup();
+  const a = connect('a'), b = connect('b'), c = connect('c');
+  const code = call(a, 'room:create', { name: 'Ana' }).room.code;
+  assert.equal(call(a, 'room:start').error, 'NOT_ENOUGH_PLAYERS');
+  call(b, 'room:join', { code });
+  assert.equal(call(b, 'room:start').error, 'NOT_HOST');
+  assert.equal(a.events('game:start').length + b.events('game:start').length, 0);
+  assert.equal(call(a, 'room:start').ok, true);
+  const ga = a.events('game:start')[0], gb = b.events('game:start')[0];
+  assert.ok(ga && gb); assert.equal(ga.seed, gb.seed); assert.equal(ga.startAt, gb.startAt); assert.equal(ga.room.players.length, 2);
+  assert.equal(call(c, 'room:join', { code }).error, 'ROOM_STARTED');
+  assert.equal(c.events('game:start').length, 0);
+});

@@ -11,6 +11,10 @@ const ERR = {
   ALREADY_IN_ROOM: 'Ya estas en una sala. Sal de ella antes de crear o unirte a otra.',
   NOT_IN_ROOM: 'No estas en ninguna sala.',
   SERVER_FULL: 'El servidor no admite mas salas ahora mismo. Intenta mas tarde.',
+  NOT_HOST: 'Solo el anfitrion puede iniciar la partida.',
+  NOT_ENOUGH_PLAYERS: 'Faltan jugadores: la sala debe estar completa para iniciar.',
+  ROOM_STARTED: 'La partida de esa sala ya comenzo.',
+  ALREADY_STARTED: 'La partida ya comenzo.',
   RATE_LIMIT: 'Demasiadas peticiones. Espera unos segundos.',
   BAD_DATA: 'Datos invalidos.',
   CODE_FAILED: 'No se pudo generar un codigo de sala. Intenta de nuevo.'
@@ -68,7 +72,8 @@ class RoomManager {
     const players = [];
     room.players.forEach((p) => players.push({ id: p.id, slot: p.slot, name: p.name }));
     players.sort((a, b) => a.slot - b.slot);
-    return { code: room.code, count: room.players.size, max: this.maxPlayers, full: room.players.size >= this.maxPlayers, players };
+    players.forEach((p) => { p.host = p.id === room.host; });
+    return { code: room.code, count: room.players.size, max: this.maxPlayers, full: room.players.size >= this.maxPlayers, host: room.host, started: !!room.started, players };
   }
 
   publicPlayer(p) { return { id: p.id, slot: p.slot, name: p.name }; }
@@ -79,7 +84,7 @@ class RoomManager {
     if (this.rooms.size >= this.maxRooms) return fail('SERVER_FULL');
     const code = this.generateCode();
     if (!code) return fail('CODE_FAILED');
-    const room = { code, createdAt: Date.now(), players: new Map() };
+    const room = { code, createdAt: Date.now(), players: new Map(), host: id, started: false, seed: 0 };
     this.rooms.set(code, room);
     const player = this._addPlayer(room, id, rawName);
     return { ok: true, room: this.snapshot(room), player: this.publicPlayer(player) };
@@ -91,6 +96,7 @@ class RoomManager {
     if (this.playerRoom.has(id)) return fail('ALREADY_IN_ROOM');
     const room = this.rooms.get(code);
     if (!room) return fail('ROOM_NOT_FOUND');
+    if (room.started) return fail('ROOM_STARTED');
     if (room.players.size >= this.maxPlayers) return fail('ROOM_FULL');
     const player = this._addPlayer(room, id, rawName);
     const others = [];
@@ -105,7 +111,7 @@ class RoomManager {
     const room = this.rooms.get(code);
     if (!room) return { ok: true, exists: false, code };
     const s = this.snapshot(room);
-    return { ok: true, exists: true, code, count: s.count, max: s.max, full: s.full };
+    return { ok: true, exists: true, code, count: s.count, max: s.max, full: s.full, started: s.started };
   }
 
   leave(id) {
@@ -118,7 +124,13 @@ class RoomManager {
     room.players.delete(id);
     let deleted = false, snap = null;
     if (room.players.size === 0) { this.rooms.delete(code); deleted = true; }   // las salas vacias se eliminan
-    else snap = this.snapshot(room);
+    else {
+      if (room.host === id) {                                                     // si se va el anfitrion, pasa al jugador con menor puesto
+        let next = null; room.players.forEach((p) => { if (!next || p.slot < next.slot) next = p; });
+        room.host = next.id;
+      }
+      snap = this.snapshot(room);
+    }
     return { ok: true, code, player: player ? this.publicPlayer(player) : null, room: snap, deleted };
   }
 
@@ -139,6 +151,20 @@ class RoomManager {
     room.players.set(id, player);
     this.playerRoom.set(id, room.code);
     return player;
+  }
+
+  /* ---------- inicio de partida (solo el anfitrion, con la sala completa) ---------- */
+  startGame(id, now) {
+    now = now == null ? Date.now() : now;
+    const code = this.playerRoom.get(id);
+    const room = code && this.rooms.get(code);
+    if (!room) return fail('NOT_IN_ROOM');
+    if (room.host !== id) return fail('NOT_HOST');
+    if (room.started) return fail('ALREADY_STARTED');
+    if (room.players.size < this.maxPlayers) return fail('NOT_ENOUGH_PLAYERS');
+    room.started = true;
+    room.seed = this.randomInt(2147483646) + 1;
+    return { ok: true, code, seed: room.seed, startAt: now + CFG.START_COUNTDOWN_MS, countdownMs: CFG.START_COUNTDOWN_MS, serverTime: now, room: this.snapshot(room) };
   }
 
   /* ---------- posicion basica ---------- */

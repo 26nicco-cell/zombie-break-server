@@ -13,7 +13,7 @@ function connect(name) {
   return new Promise((resolve, reject) => {
     const s = io(URL, { transports: ['websocket'], reconnection: false, timeout: 60000 });   // 60 s: Render free puede tardar en despertar
     s.log = [];
-    ['room:state', 'player:joined', 'player:left', 'player:state'].forEach((ev) => s.on(ev, (d) => s.log.push({ ev, d })));
+    ['room:state', 'player:joined', 'player:left', 'player:state', 'game:start'].forEach((ev) => s.on(ev, (d) => s.log.push({ ev, d })));
     s.once('connect', () => resolve(s));
     s.once('connect_error', (e) => reject(new Error(name + ' no pudo conectar: ' + e.message)));
   });
@@ -41,7 +41,11 @@ const emit = (s, ev, payload) => new Promise((resolve) => s.emit(ev, payload, re
   check(a.log.some((l) => l.ev === 'player:joined' && l.d.player.name === 'Beto'), 'jugador 1 ve que entro el jugador 2');
   check(b.log.some((l) => l.ev === 'player:state' && l.d.slot === 1 && l.d.x === 100), 'jugador 2 recibe la posicion del jugador 1 al entrar');
 
-  check((await emit(c, 'room:join', { code })).error === 'ROOM_FULL', 'el tercer jugador es rechazado (sala llena)');
+  check((await emit(b, 'room:start')).error === 'NOT_HOST', 'solo el anfitrion puede iniciar');
+  check((await emit(a, 'room:start')).ok, 'el anfitrion inicia la partida');
+  await new Promise((r) => setTimeout(r, 300));
+  check(a.log.some((l) => l.ev === 'game:start') && b.log.some((l) => l.ev === 'game:start'), 'ambos reciben game:start');
+  check(['ROOM_FULL', 'ROOM_STARTED'].includes((await emit(c, 'room:join', { code })).error), 'el tercer jugador es rechazado (sala llena o partida iniciada)');
   check((await emit(b, 'room:create', {})).error === 'ALREADY_IN_ROOM', 'no se puede crear sala estando ya en una');
 
   b.emit('player:update', { x: 5, y: 6, dir: 'up', moving: false });
